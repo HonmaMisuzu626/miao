@@ -3,42 +3,68 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>说谎的马卡龙 - 极速加载版</title>
+    <title>说谎的马卡龙 - 终极抛射狂热版</title>
+    <script src="https://cdn.jsdelivr.net/npm/hydrogen-js-sdk@2.2.3/dist/Bmob-2.2.3.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.sound.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.18.0/matter.min.js"></script>
     <style>
         body { margin: 0; overflow: hidden; background: #FAFAFA; cursor: crosshair; touch-action: none; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;}
         
-        /* ================= 极简呼吸加载屏 ================= */
-        #p5_loading {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            background: #FAFAFA; display: flex; flex-direction: column;
-            justify-content: center; align-items: center; z-index: 9999;
-        }
-        .loader {
-            width: 40px; height: 40px; border: 3px solid #eee;
-            border-top: 3px solid #FF0040; border-radius: 50%;
-            animation: spin 1s linear infinite; margin-bottom: 20px;
-        }
+        #p5_loading { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #FAFAFA; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; }
+        .loader { width: 40px; height: 40px; border: 3px solid #eee; border-top: 3px solid #FF0040; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .loading-text { color: #888; font-size: 16px; letter-spacing: 2px; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+
+        #name-modal {
+            display: none; position: fixed; top: 60%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95); padding: 20px 30px;
+            border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            text-align: center; z-index: 100; width: 80%; max-width: 300px; border: 1px solid #EEE;
+        }
+        #name-modal h3 { margin: 0 0 15px 0; color: #333; font-size: 18px; letter-spacing: 1px;}
+        #ninja-name-input {
+            width: 90%; padding: 10px; font-size: 16px; text-align: center; border: 2px solid #DDD; border-radius: 8px; outline: none;
+            color: #FF0040; font-weight: bold; margin-bottom: 15px; transition: border-color 0.3s;
+        }
+        #ninja-name-input:focus { border-color: #FF0040; }
+        #confirm-name-btn {
+            background: #FF0040; color: white; border: none; padding: 10px 30px;
+            font-size: 16px; border-radius: 20px; font-weight: bold; cursor: pointer;
+            box-shadow: 0 4px 10px rgba(255,0,64,0.3); transition: transform 0.1s;
+        }
+        #confirm-name-btn:active { transform: scale(0.95); }
     </style>
 </head>
 <body>
+    <div id="p5_loading"><div class="loader"></div><div class="loading-text">NOW LOADING...</div></div>
 
-    <div id="p5_loading">
-        <div class="loader"></div>
-        <div class="loading-text">NOW LOADING...</div>
+    <div id="name-modal">
+        <h3>请输入你的忍者代号</h3>
+        <input type="text" id="ninja-name-input" placeholder="最多10个字" maxlength="10">
+        <button id="confirm-name-btn" onclick="savePlayerName()">确 定</button>
     </div>
 
 <script>
+// =======================================================
+// ！！！极其重要：换成你 Bmob 后台的真实密钥 ！！！
+// =======================================================
+Bmob.initialize("这里填你的_Secret_Key", "这里填你的_API_安全码");
+
 const { Engine, World, Bodies, Composite } = Matter;
 let engine, world, song, lyricsTimeline = [];
-let fallingObjects = [], staticLines = [], currentLine = [];
+let fallingObjects = [];
+let bladeTrail = []; 
 let songReady = false, bgVideo, endVideo;
 let gameState = 0; 
+
+let score = 0; let combo = 0; let lives = 3; let shakeTime = 0; 
+let freezeTime = 0; // ★ 新增：子弹时间倒计时
+
+let playerName = null; 
+let globalLeaderboard = []; 
+let isUploading = false; 
 
 const colors = ['#FF0040', '#FFB7B2', '#FFFFFF', '#B5EAD7'];
 
@@ -54,192 +80,268 @@ function preload() {
 
 function setup() {
     createCanvas(windowWidth, windowHeight);
-    pixelDensity(1); 
-    frameRate(60);   
+    pixelDensity(1); frameRate(60);   
 
-    engine = Engine.create();
-    world = engine.world;
-    engine.gravity.y = 0.5;
+    let savedName = localStorage.getItem('ninja_name');
+    if (savedName) { playerName = savedName; } else { document.getElementById('name-modal').style.display = 'block'; }
+    fetchGlobalLeaderboard(); 
+
+    engine = Engine.create(); world = engine.world; 
+    // ★ 增加物理重力，让抛物线更干脆利落
+    engine.gravity.y = 0.8; 
 
     bgVideo = createVideo(['bg.mp4'], () => { bgVideo.elt.onended = () => endGame(); });
-    bgVideo.hide(); bgVideo.volume(0);
-    bgVideo.elt.muted = true; 
-    bgVideo.elt.setAttribute('playsinline', 'true'); 
-    bgVideo.elt.setAttribute('webkit-playsinline', 'true'); 
-    // 【安卓提速核心】：禁止视频在开始前全量预加载，只加载一点点元数据
+    bgVideo.hide(); bgVideo.volume(0); bgVideo.elt.muted = true; 
+    bgVideo.elt.setAttribute('playsinline', 'true'); bgVideo.elt.setAttribute('webkit-playsinline', 'true'); 
     bgVideo.elt.setAttribute('preload', 'metadata');
 
-    endVideo = createVideo(['end.mp4']);
-    endVideo.hide(); endVideo.volume(1); 
-    endVideo.elt.setAttribute('playsinline', 'true'); 
-    endVideo.elt.setAttribute('webkit-playsinline', 'true');
-    // 【安卓提速核心】：片尾视频更不需要提前下载，直接设置 lazy
+    endVideo = createVideo(['end.mp4']); endVideo.hide(); endVideo.volume(1); 
+    endVideo.elt.setAttribute('playsinline', 'true'); endVideo.elt.setAttribute('webkit-playsinline', 'true');
     endVideo.elt.setAttribute('preload', 'none');
 
     textFont('"Helvetica Neue", Helvetica, Arial, sans-serif');
 
+    // ★ 核心改动：底部抛射生成器
     setInterval(() => {
         if (gameState === 1) {
-            let time = (songReady && song.isPlaying()) ? song.currentTime() : (millis() / 1000 % 30);
-            let cur = lyricsTimeline.find(l => time >= l.start && time <= l.start + 2.5);
-            let char = cur ? random(cur.text.split("")) : random(["★", "●", "🌀", "🥖", "✕"]);
+            // 一次可能喷出 1 到 2 个物体，增加爽快感
+            let spawnCount = random() > 0.7 ? 2 : 1;
             
-            let body = Bodies.circle(random(50, width-50), -50, 25, { restitution: 0.7, friction: 0.1 });
-            fallingObjects.push({ body: body, text: char, color: random(colors) });
-            Composite.add(world, body);
+            for(let i=0; i<spawnCount; i++) {
+                let time = (songReady && song.isPlaying()) ? song.currentTime() : (millis() / 1000 % 30);
+                let cur = lyricsTimeline.find(l => time >= l.start && time <= l.start + 2.5);
+                
+                // 物品概率池：70%普通字，15%炸弹💣，10%冰冻时钟❄️，5%红心💖
+                let rand = random(100);
+                let type = "normal";
+                let char = cur ? random(cur.text.split("")) : "🎵";
+                let objColor = random(colors);
 
-            if (fallingObjects.length > 60) {
-                let oldest = fallingObjects.shift();
-                World.remove(world, oldest.body);
+                if (rand < 5) { type = "heart"; char = "💖"; }
+                else if (rand < 15) { type = "freeze"; char = "❄️"; }
+                else if (rand < 30) { type = "trap"; char = "💣"; objColor = '#000000'; }
+
+                // ★ 改为从屏幕最下方生成
+                let startX = random(100, width-100);
+                let body = Bodies.circle(startX, height + 40, 30, { 
+                    restitution: 0.7, friction: 0.1, torque: random(-0.2, 0.2) 
+                });
+                
+                // ★ 赋予极大的向上的爆发力，形成抛射效果！
+                Matter.Body.setVelocity(body, { 
+                    x: random(-4, 4), // 随机向左或向右飞
+                    y: random(-18, -25) // 强力向上抛
+                });
+                
+                fallingObjects.push({ body: body, text: char, color: objColor, sliced: false, type: type });
+                Composite.add(world, body);
             }
+
+            if (fallingObjects.length > 60) { let oldest = fallingObjects.shift(); World.remove(world, oldest.body); }
         }
-    }, 200); 
+    }, 400); 
+}
+
+function savePlayerName() {
+    let inputVal = document.getElementById('ninja-name-input').value.trim();
+    if (inputVal === "") { inputVal = "忍者" + Math.floor(random(100, 999)); }
+    playerName = inputVal; localStorage.setItem('ninja_name', playerName); 
+    document.getElementById('name-modal').style.display = 'none'; 
 }
 
 function draw() {
+    if (shakeTime > 0) { push(); translate(random(-15, 15), random(-15, 15)); shakeTime--; } else { push(); }
+
     if (gameState === 0) {
-        background('#FAFAFA'); 
-        fill('#333333'); textAlign(CENTER, CENTER);
-        textSize(min(width*0.08, 55)); textStyle(NORMAL); 
-        text("嘘つきは馬鹿に効く", width/2, height/2 - 40);
-        textSize(min(width*0.04, 20)); fill('#888888'); 
-        text("feat. Kasane Teto", width/2, height/2 + 30);
-        let alpha = map(sin(frameCount * 0.05), -1, 1, 50, 200);
-        fill(150, 150, 150, alpha); textSize(min(width*0.03, 16)); letterSpacing = 2; 
-        text("- Click to Start -", width/2, height/2 + 120);
-        return; 
+        background('#FAFAFA'); fill('#333333'); textAlign(CENTER, CENTER);
+        textSize(min(width*0.08, 55)); textStyle(NORMAL); text("嘘つきは馬鹿に効く", width/2, height/2 - 40);
+        textSize(min(width*0.04, 20)); fill('#888888'); text("ARCADE NINJA MODE", width/2, height/2 + 20); 
+        
+        if (playerName) {
+            fill('#FF0040'); textSize(18); text("🥷 准备好了吗, " + playerName + "?", width/2, height/2 + 70);
+            let alpha = map(sin(frameCount * 0.05), -1, 1, 50, 200); fill(150, 150, 150, alpha); textSize(min(width*0.03, 16)); letterSpacing = 2; 
+            text("- Swipe to Start -", width/2, height/2 + 130);
+        }
+        pop(); return; 
     }
 
     if (gameState === 1) {
         background(15); 
-        if (bgVideo && bgVideo.width > 0) {
-            push(); tint(255, 120); 
-            let scale = Math.max(width / bgVideo.width, height / bgVideo.height);
-            imageMode(CENTER);
-            image(bgVideo, width/2, height/2, bgVideo.width * scale, bgVideo.height * scale);
-            pop();
+        
+        // ★ 子弹时间特效处理
+        if (freezeTime > 0) {
+            freezeTime--;
+            engine.timing.timeScale = 0.3; // 物理引擎时间变慢 70%！
+            tint(100, 200, 255, 200); // 画面变成冰蓝色滤镜
+        } else {
+            engine.timing.timeScale = 1; // 恢复正常速度
+            tint(255, 255); 
         }
 
+        if (bgVideo && bgVideo.width > 0) {
+            push(); let scale = Math.max(width / bgVideo.width, height / bgVideo.height); imageMode(CENTER); image(bgVideo, width/2, height/2, bgVideo.width * scale, bgVideo.height * scale); pop();
+        }
         Engine.update(engine);
 
         for (let i = fallingObjects.length-1; i>=0; i--) {
-            let obj = fallingObjects[i];
-            let b = obj.body;
-            push();
-            translate(b.position.x, b.position.y); rotate(b.angle);
-            textAlign(CENTER, CENTER);
-            fill(obj.color); textSize(36); textStyle(BOLD); text(obj.text, 0, 0);
-            pop();
-            if (b.position.y > height+100) { World.remove(world, b); fallingObjects.splice(i,1); }
+            let obj = fallingObjects[i]; let b = obj.body;
+            
+            // 已切碎物体的坠落特效
+            if (obj.sliced) {
+                push(); translate(b.position.x, b.position.y); rotate(b.angle); textAlign(CENTER, CENTER);
+                if (obj.type === "trap") { fill(255, 100, 0, obj.life); textSize(obj.size * 1.5); text("💥", 0, 0); } 
+                else if (obj.type === "freeze") { fill(0, 200, 255, obj.life); textSize(obj.size); text("✨", 0, 0); }
+                else if (obj.type === "heart") { fill(255, 50, 100, obj.life); textSize(obj.size); text("💖", 0, 0); }
+                else { fill(255, 0, 64, obj.life); textSize(obj.size); textStyle(BOLD); text(obj.text, 0, 0); }
+                pop();
+                obj.life -= 15; obj.size -= 1;
+                if (obj.life <= 0) { World.remove(world, b); fallingObjects.splice(i,1); } continue;
+            }
+
+            // 正常飞行物体的绘制
+            push(); translate(b.position.x, b.position.y); rotate(b.angle); textAlign(CENTER, CENTER);
+            fill(obj.color); textSize(50); textStyle(BOLD); text(obj.text, 0, 0);
+            
+            // 给特殊道具加发光特效
+            if (obj.type === "trap") { drawingContext.shadowBlur = 20; drawingContext.shadowColor = 'red'; }
+            if (obj.type === "freeze") { drawingContext.shadowBlur = 20; drawingContext.shadowColor = '#00E5FF'; }
+            if (obj.type === "heart") { drawingContext.shadowBlur = 20; drawingContext.shadowColor = '#FF0040'; }
+            pop(); drawingContext.shadowBlur = 0; 
+
+            // ★ 出界判定：必须是掉出屏幕底端，且速度向下（掉落中），才算错过。刚射出屏幕底部不算！
+            if (b.position.y > height + 80 && b.velocity.y > 0) { 
+                if (obj.type === "normal") combo = 0; // 错过普通字断连击
+                World.remove(world, b); fallingObjects.splice(i,1); 
+            }
         }
 
-        strokeWeight(6);
-        for (let i = staticLines.length-1; i>=0; i--) {
-            let l = staticLines[i];
-            l.life -= 3; 
-            if (l.life <= 0) {
-                for (let b of l.bodies) World.remove(world, b);
-                staticLines.splice(i, 1);
-            } else {
-                stroke(255, 0, 64, l.life);
-                for (let j = 0; j < l.pts.length - 1; j++) {
-                    line(l.pts[j].x, l.pts[j].y, l.pts[j+1].x, l.pts[j+1].y);
+        // 刀光与碰撞检测
+        if (mouseIsPressed) {
+            bladeTrail.push({ x: mouseX, y: mouseY, life: 20 });
+            for (let i = fallingObjects.length-1; i>=0; i--) {
+                let obj = fallingObjects[i];
+                if (!obj.sliced) {
+                    let d = dist(mouseX, mouseY, obj.body.position.x, obj.body.position.y);
+                    let speed = dist(mouseX, mouseY, pmouseX, pmouseY);
+                    if (d < 50 && speed > 5) {
+                        obj.sliced = true; obj.life = 255; obj.size = 60;
+                        
+                        // ★ 核心道具效果触发！
+                        if (obj.type === "trap") {
+                            lives--; combo = 0; shakeTime = 30; Matter.Body.setVelocity(obj.body, { x: random(-10, 10), y: random(-10, 10) });
+                            if (lives <= 0) endGame();
+                        } else if (obj.type === "freeze") {
+                            freezeTime = 180; // 3秒钟慢动作
+                            score += 20;
+                            Matter.Body.setVelocity(obj.body, { x: random(-5, 5), y: -10 });
+                        } else if (obj.type === "heart") {
+                            lives = min(lives + 1, 5); // 最多 5 条命
+                            score += 50; // 吃心额外加高分
+                            Matter.Body.setVelocity(obj.body, { x: random(-5, 5), y: -10 });
+                        } else {
+                            combo++; score += 10 + (combo * 2); Matter.Body.setVelocity(obj.body, { x: (obj.body.position.x - mouseX) * 0.3, y: -5 });
+                        }
+                    }
                 }
             }
         }
 
-        if (mouseIsPressed) {
-            let p = { x: mouseX, y: mouseY };
-            if (currentLine.length === 0 || dist(currentLine[currentLine.length - 1].x, currentLine[currentLine.length - 1].y, p.x, p.y) > 15) {
-                currentLine.push(p);
-            }
-            stroke(255); noFill();
-            beginShape();
-            for (let pt of currentLine) vertex(pt.x, pt.y);
-            endShape();
+        noFill(); beginShape();
+        for (let i = 0; i < bladeTrail.length; i++) {
+            let pt = bladeTrail[i]; strokeWeight(pt.life * 0.7); stroke(255, 255, 255, pt.life * 12); vertex(pt.x, pt.y); pt.life -= 2; 
         }
+        endShape(); bladeTrail = bladeTrail.filter(pt => pt.life > 0);
 
+        // UI 绘制
+        drawingContext.shadowBlur = 6; drawingContext.shadowColor = 'rgba(0,0,0,0.8)';
+        fill('#FFFFFF'); textAlign(LEFT, TOP); textSize(22); textStyle(BOLD); text("SCORE: " + score, 20, 20);
+        if (combo > 1) { fill('#FF0040'); textSize(28 + sin(frameCount*0.3)*4); text(combo + " COMBO", 20, 50); }
+        
+        // 子弹时间提示
+        if (freezeTime > 0) { fill('#00E5FF'); textSize(20); text("❄️ FREEZE ❄️", 20, 90); }
+        
+        textAlign(RIGHT, TOP); textSize(26); let hearts = ""; for(let i = 0; i < lives; i++) hearts += "💖"; text(hearts, width - 20, 20);
+        drawingContext.shadowBlur = 0; 
+        
         drawSkipButton();
     }
 
     if (gameState === 2) {
         background(15);
         if (endVideo && endVideo.width > 0) {
-            push(); tint(255, 200); 
-            let scale = Math.max(width / endVideo.width, height / endVideo.height);
-            imageMode(CENTER);
-            image(endVideo, width/2, height/2, endVideo.width * scale, endVideo.height * scale);
-            pop();
+            push(); tint(255, 255); let scale = Math.max(width / endVideo.width, height / endVideo.height); imageMode(CENTER); image(endVideo, width/2, height/2, endVideo.width * scale, endVideo.height * scale); pop();
         }
-        fill(255); textAlign(CENTER, CENTER);
-        drawingContext.shadowBlur = 8; drawingContext.shadowColor = 'rgba(0,0,0,0.8)';
-        textSize(min(width*0.1, 65)); textStyle(BOLD); fill('#FFFFFF'); 
-        text("CLEAR", width/2, height/2 - 50);
-        textSize(min(width*0.04, 22)); fill(220); textStyle(NORMAL);
-        text("Thank you for playing.", width/2, height/2 + 30);
-        let alpha = map(sin(frameCount * 0.05), -1, 1, 50, 255);
-        fill(255, 255, 255, alpha); textSize(min(width*0.03, 16));
-        text("- Click to Retry -", width/2, height/2 + 110);
+        fill(255); textAlign(CENTER, CENTER); drawingContext.shadowBlur = 10; drawingContext.shadowColor = 'black';
+        
+        if (lives <= 0) { textSize(min(width*0.12, 60)); textStyle(BOLD); fill('#FF0040'); text("GAME OVER", width/2, height/2 - 120); } 
+        else { textSize(min(width*0.12, 60)); textStyle(BOLD); fill('#FFFFFF'); text("STAGE CLEAR", width/2, height/2 - 120); }
+        
+        textSize(40); fill('#FFB7B2'); text("SCORE: " + score, width/2, height/2 - 50);
+        textSize(20); fill('#00E5FF'); text("--- GLOBAL RANKING 🌍 ---", width/2, height/2 + 20);
+        
+        if (globalLeaderboard.length === 0) {
+            fill('#FFFFFF'); textSize(16); text("正在拉取全球数据...", width/2, height/2 + 80);
+        } else {
+            for (let i = 0; i < globalLeaderboard.length; i++) {
+                let entry = globalLeaderboard[i];
+                fill(i === 0 ? '#FFD700' : (i === 1 ? '#C0C0C0' : (i === 2 ? '#CD7F32' : '#FFFFFF'))); 
+                textSize(20); text(`NO.${i+1}  ${entry.name} : ${entry.score} pts`, width/2, height/2 + 60 + (i*28));
+            }
+        }
+
+        let alpha = map(sin(frameCount * 0.05), -1, 1, 50, 255); fill(255, 255, 255, alpha); textSize(min(width*0.04, 16));
+        text(isUploading ? "Uploading Score..." : "- Tap to Retry -", width/2, height/2 + 220);
         drawingContext.shadowBlur = 0;
     }
+    pop(); 
 }
 
 function drawSkipButton() {
-    let btnX = width - 40; let btnY = 40; let btnSize = 50;      
+    let btnX = width - 40; let btnY = 70; let btnSize = 40;      
     push(); fill(0, 0, 0, 80); noStroke(); circle(btnX, btnY, btnSize);
-    let iconScale = 1 + sin(frameCount * 0.1) * 0.1;
-    translate(btnX, btnY); scale(iconScale); textAlign(CENTER, CENTER);
-    textSize(22); text("⏭", 0, 0); pop();
+    let iconScale = 1 + sin(frameCount * 0.1) * 0.1; translate(btnX, btnY); scale(iconScale); textAlign(CENTER, CENTER); textSize(18); text("⏭", 0, 0); pop();
 }
 
 function mousePressed() {
-    if (gameState === 0) {
-        gameState = 1;
-        if (songReady) song.play();
-        if (bgVideo) bgVideo.play(); 
+    if (gameState === 0 && playerName) {
+        gameState = 1; score = 0; combo = 0; lives = 3; freezeTime = 0; isUploading = false;
+        engine.timing.timeScale = 1; // 确保时间流速正常
+        if (songReady) song.play(); if (bgVideo) bgVideo.play(); 
     } 
     else if (gameState === 1) {
-        if (dist(mouseX, mouseY, width - 40, 40) < 60) { endGame(); return; }
-        currentLine = [];
+        if (dist(mouseX, mouseY, width - 40, 70) < 50) { endGame(); return; }
+        bladeTrail = []; 
     } 
-    else if (gameState === 2) { resetGame(); }
+    else if (gameState === 2 && !isUploading) { resetGame(); }
 }
 
-function mouseReleased() {
-    if (gameState === 1 && currentLine.length > 1) {
-        let createdBodies = [];
-        for(let i = 0; i < currentLine.length - 1; i++) {
-            let p1 = currentLine[i];
-            let p2 = currentLine[i+1];
-            let d = dist(p1.x, p1.y, p2.x, p2.y);
-            let segment = Bodies.rectangle((p1.x+p2.x)/2, (p1.y+p2.y)/2, d, 8, { isStatic: true, angle: atan2(p2.y-p1.y, p2.x-p1.x) });
-            Composite.add(world, segment);
-            createdBodies.push(segment);
-        }
-        staticLines.push({ pts: [...currentLine], bodies: createdBodies, life: 255 });
-    }
-    currentLine = [];
-}
-
-function touchMoved() { return false; }
+function touchMoved() { return false; } 
 
 function endGame() {
-    gameState = 2;
-    if (songReady && song.isPlaying()) song.stop();
-    if (bgVideo) bgVideo.stop();   
-    if (endVideo) { 
-        endVideo.time(0); 
-        endVideo.play(); 
+    gameState = 2; engine.timing.timeScale = 1; // 结束时恢复正常速度
+    if (songReady && song.isPlaying()) song.stop(); if (bgVideo) bgVideo.stop();   
+    if (endVideo) { endVideo.time(0); endVideo.play(); }
+
+    if (score > 0 && !isUploading) {
+        isUploading = true;
+        const query = Bmob.Query('Leaderboard');
+        query.set("name", playerName); query.set("score", score);
+        query.save().then(res => {
+            console.log("云端上传成功！"); isUploading = false; fetchGlobalLeaderboard(); 
+        }).catch(err => { console.log("上传失败", err); isUploading = false; });
     }
+}
+
+function fetchGlobalLeaderboard() {
+    const query = Bmob.Query("Leaderboard");
+    query.order("-score"); query.limit(5);        
+    query.find().then(res => { globalLeaderboard = res.map(item => { return { name: item.name, score: item.score }; });
+    }).catch(err => { console.log("拉取榜单失败", err); });
 }
 
 function resetGame() {
     for (let obj of fallingObjects) World.remove(world, obj.body);
-    for (let l of staticLines) { for (let b of l.bodies) World.remove(world, b); }
-    fallingObjects = []; staticLines = []; currentLine = [];
-    if (bgVideo) bgVideo.time(0);
-    if (endVideo) endVideo.stop(); 
-    gameState = 0; 
+    fallingObjects = []; bladeTrail = []; if (bgVideo) bgVideo.time(0); if (endVideo) endVideo.stop(); gameState = 0; 
 }
 
 function windowResized() { resizeCanvas(windowWidth, windowHeight); }
