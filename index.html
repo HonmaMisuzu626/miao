@@ -3,15 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>说谎的马卡龙 - 苹果完美适配版</title>
+    <title>王小羊大笨蛋</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.sound.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.18.0/matter.min.js"></script>
     <style>
         body { margin: 0; overflow: hidden; background: #FAFAFA; cursor: crosshair; touch-action: none; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;}
+        
+        /* ================= 极简呼吸加载屏 ================= */
+        #p5_loading {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: #FAFAFA; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 9999;
+        }
+        .loader {
+            width: 40px; height: 40px; border: 3px solid #eee;
+            border-top: 3px solid #FF0040; border-radius: 50%;
+            animation: spin 1s linear infinite; margin-bottom: 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .loading-text { color: #888; font-size: 16px; letter-spacing: 2px; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
     </style>
 </head>
 <body>
+
+    <div id="p5_loading">
+        <div class="loader"></div>
+        <div class="loading-text">NOW LOADING...</div>
+    </div>
+
 <script>
 const { Engine, World, Bodies, Composite } = Matter;
 let engine, world, song, lyricsTimeline = [];
@@ -33,7 +54,6 @@ function preload() {
 
 function setup() {
     createCanvas(windowWidth, windowHeight);
-    
     pixelDensity(1); 
     frameRate(60);   
 
@@ -41,21 +61,20 @@ function setup() {
     world = engine.world;
     engine.gravity.y = 0.5;
 
-    // ================= 苹果防弹窗核心修复 =================
     bgVideo = createVideo(['bg.mp4'], () => { bgVideo.elt.onended = () => endGame(); });
-    bgVideo.hide(); 
-    bgVideo.volume(0);
-    // 强制底层打上内联播放标记，并强制底层静音（苹果允许内联播放的前提是静音）
+    bgVideo.hide(); bgVideo.volume(0);
     bgVideo.elt.muted = true; 
     bgVideo.elt.setAttribute('playsinline', 'true'); 
     bgVideo.elt.setAttribute('webkit-playsinline', 'true'); 
+    // 【安卓提速核心】：禁止视频在开始前全量预加载，只加载一点点元数据
+    bgVideo.elt.setAttribute('preload', 'metadata');
 
     endVideo = createVideo(['end.mp4']);
-    endVideo.hide(); 
-    endVideo.volume(1); 
+    endVideo.hide(); endVideo.volume(1); 
     endVideo.elt.setAttribute('playsinline', 'true'); 
     endVideo.elt.setAttribute('webkit-playsinline', 'true');
-    // =======================================================
+    // 【安卓提速核心】：片尾视频更不需要提前下载，直接设置 lazy
+    endVideo.elt.setAttribute('preload', 'none');
 
     textFont('"Helvetica Neue", Helvetica, Arial, sans-serif');
 
@@ -208,7 +227,10 @@ function endGame() {
     gameState = 2;
     if (songReady && song.isPlaying()) song.stop();
     if (bgVideo) bgVideo.stop();   
-    if (endVideo) { endVideo.time(0); endVideo.play(); }
+    if (endVideo) { 
+        endVideo.time(0); 
+        endVideo.play(); 
+    }
 }
 
 function resetGame() {
