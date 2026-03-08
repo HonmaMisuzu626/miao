@@ -3,20 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>说谎的马卡龙 - Aidn Style</title>
+    <title>说谎的马卡龙 - 苹果完美适配版</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.sound.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.18.0/matter.min.js"></script>
     <style>
-        /* 引入一种更干净的无衬线字体，类似 Aidn 网页的默认字体 */
-        body { 
-            margin: 0; 
-            overflow: hidden; 
-            background: #FAFAFA; 
-            cursor: crosshair; 
-            touch-action: none;
-            font-family: "Helvetica Neue", Helvetica, Arial, "Microsoft Yahei", sans-serif;
-        }
+        body { margin: 0; overflow: hidden; background: #FAFAFA; cursor: crosshair; touch-action: none; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;}
     </style>
 </head>
 <body>
@@ -41,21 +33,30 @@ function preload() {
 
 function setup() {
     createCanvas(windowWidth, windowHeight);
+    
+    pixelDensity(1); 
+    frameRate(60);   
+
     engine = Engine.create();
     world = engine.world;
     engine.gravity.y = 0.5;
 
-    bgVideo = createVideo(['bg.mp4'], () => {
-        bgVideo.elt.onended = () => endGame(); 
-    });
+    // ================= 苹果防弹窗核心修复 =================
+    bgVideo = createVideo(['bg.mp4'], () => { bgVideo.elt.onended = () => endGame(); });
     bgVideo.hide(); 
-    bgVideo.volume(0); 
+    bgVideo.volume(0);
+    // 强制底层打上内联播放标记，并强制底层静音（苹果允许内联播放的前提是静音）
+    bgVideo.elt.muted = true; 
+    bgVideo.elt.setAttribute('playsinline', 'true'); 
+    bgVideo.elt.setAttribute('webkit-playsinline', 'true'); 
 
     endVideo = createVideo(['end.mp4']);
     endVideo.hide(); 
     endVideo.volume(1); 
+    endVideo.elt.setAttribute('playsinline', 'true'); 
+    endVideo.elt.setAttribute('webkit-playsinline', 'true');
+    // =======================================================
 
-    // 设置全局字体以符合极简风格
     textFont('"Helvetica Neue", Helvetica, Arial, sans-serif');
 
     setInterval(() => {
@@ -63,44 +64,35 @@ function setup() {
             let time = (songReady && song.isPlaying()) ? song.currentTime() : (millis() / 1000 % 30);
             let cur = lyricsTimeline.find(l => time >= l.start && time <= l.start + 2.5);
             let char = cur ? random(cur.text.split("")) : random(["★", "●", "🌀", "🥖", "✕"]);
-            let body = Bodies.circle(random(50, width-50), -50, 25, { restitution: 0.7 });
+            
+            let body = Bodies.circle(random(50, width-50), -50, 25, { restitution: 0.7, friction: 0.1 });
             fallingObjects.push({ body: body, text: char, color: random(colors) });
             Composite.add(world, body);
+
+            if (fallingObjects.length > 60) {
+                let oldest = fallingObjects.shift();
+                World.remove(world, oldest.body);
+            }
         }
-    }, 200);
+    }, 200); 
 }
 
 function draw() {
-    // ================= 状态 0：开始界面 (Aidn 白净风格) =================
     if (gameState === 0) {
-        background('#FAFAFA'); // 极净白灰背景
-        
-        fill('#333333'); // 深灰色代替纯黑，更高级
-        textAlign(CENTER, CENTER);
-        
-        // 主标题：去掉了粗体和红色，使用细致的深灰色
-        textSize(min(width*0.08, 55)); 
-        textStyle(NORMAL); 
+        background('#FAFAFA'); 
+        fill('#333333'); textAlign(CENTER, CENTER);
+        textSize(min(width*0.08, 55)); textStyle(NORMAL); 
         text("嘘つきは馬鹿に効く", width/2, height/2 - 40);
-        
-        // 副标题
-        textSize(min(width*0.04, 20)); 
-        fill('#888888'); // 浅灰色
+        textSize(min(width*0.04, 20)); fill('#888888'); 
         text("feat. Kasane Teto", width/2, height/2 + 30);
-        
-        // 呼吸提示音
         let alpha = map(sin(frameCount * 0.05), -1, 1, 50, 200);
-        fill(150, 150, 150, alpha);
-        textSize(min(width*0.03, 16));
-        letterSpacing = 2; // 模拟字间距拉开的感觉
+        fill(150, 150, 150, alpha); textSize(min(width*0.03, 16)); letterSpacing = 2; 
         text("- Click to Start -", width/2, height/2 + 120);
         return; 
     }
 
-    // ================= 状态 1：游戏中 (暗色沉浸风格) =================
     if (gameState === 1) {
-        background(15); // 游戏时背景变暗，凸显视频和霓虹线
-        
+        background(15); 
         if (bgVideo && bgVideo.width > 0) {
             push(); tint(255, 120); 
             let scale = Math.max(width / bgVideo.width, height / bgVideo.height);
@@ -125,7 +117,7 @@ function draw() {
         strokeWeight(6);
         for (let i = staticLines.length-1; i>=0; i--) {
             let l = staticLines[i];
-            l.life -= 2; 
+            l.life -= 3; 
             if (l.life <= 0) {
                 for (let b of l.bodies) World.remove(world, b);
                 staticLines.splice(i, 1);
@@ -139,7 +131,9 @@ function draw() {
 
         if (mouseIsPressed) {
             let p = { x: mouseX, y: mouseY };
-            currentLine.push(p);
+            if (currentLine.length === 0 || dist(currentLine[currentLine.length - 1].x, currentLine[currentLine.length - 1].y, p.x, p.y) > 15) {
+                currentLine.push(p);
+            }
             stroke(255); noFill();
             beginShape();
             for (let pt of currentLine) vertex(pt.x, pt.y);
@@ -149,7 +143,6 @@ function draw() {
         drawSkipButton();
     }
 
-    // ================= 状态 2：游戏结束 (克制风格) =================
     if (gameState === 2) {
         background(15);
         if (endVideo && endVideo.width > 0) {
@@ -159,43 +152,25 @@ function draw() {
             image(endVideo, width/2, height/2, endVideo.width * scale, endVideo.height * scale);
             pop();
         }
-
         fill(255); textAlign(CENTER, CENTER);
         drawingContext.shadowBlur = 8; drawingContext.shadowColor = 'rgba(0,0,0,0.8)';
-        
-        textSize(min(width*0.1, 65)); textStyle(BOLD); fill('#FFFFFF'); // 改为纯白
+        textSize(min(width*0.1, 65)); textStyle(BOLD); fill('#FFFFFF'); 
         text("CLEAR", width/2, height/2 - 50);
-        
         textSize(min(width*0.04, 22)); fill(220); textStyle(NORMAL);
-        // 极简感谢语
         text("Thank you for playing.", width/2, height/2 + 30);
-        
         let alpha = map(sin(frameCount * 0.05), -1, 1, 50, 255);
-        fill(255, 255, 255, alpha);
-        textSize(min(width*0.03, 16));
+        fill(255, 255, 255, alpha); textSize(min(width*0.03, 16));
         text("- Click to Retry -", width/2, height/2 + 110);
-        
         drawingContext.shadowBlur = 0;
     }
 }
 
 function drawSkipButton() {
-    let btnX = width - 40; 
-    let btnY = 40;         
-    let btnSize = 50;      
-
-    push();
-    fill(0, 0, 0, 80); // 更淡的背景
-    noStroke();
-    circle(btnX, btnY, btnSize);
-
+    let btnX = width - 40; let btnY = 40; let btnSize = 50;      
+    push(); fill(0, 0, 0, 80); noStroke(); circle(btnX, btnY, btnSize);
     let iconScale = 1 + sin(frameCount * 0.1) * 0.1;
-    translate(btnX, btnY);
-    scale(iconScale);
-    textAlign(CENTER, CENTER);
-    textSize(22);
-    text("⏭", 0, 0); // 换成更现代的跳过图标代替礼物盒
-    pop();
+    translate(btnX, btnY); scale(iconScale); textAlign(CENTER, CENTER);
+    textSize(22); text("⏭", 0, 0); pop();
 }
 
 function mousePressed() {
@@ -205,23 +180,18 @@ function mousePressed() {
         if (bgVideo) bgVideo.play(); 
     } 
     else if (gameState === 1) {
-        if (dist(mouseX, mouseY, width - 40, 40) < 60) {
-            endGame(); 
-            return;    
-        }
+        if (dist(mouseX, mouseY, width - 40, 40) < 60) { endGame(); return; }
         currentLine = [];
     } 
-    else if (gameState === 2) {
-        resetGame();
-    }
+    else if (gameState === 2) { resetGame(); }
 }
 
 function mouseReleased() {
-    if (gameState === 1 && currentLine.length > 2) {
+    if (gameState === 1 && currentLine.length > 1) {
         let createdBodies = [];
-        for(let i = 0; i < currentLine.length - 2; i += 3) {
+        for(let i = 0; i < currentLine.length - 1; i++) {
             let p1 = currentLine[i];
-            let p2 = currentLine[min(i + 3, currentLine.length - 1)];
+            let p2 = currentLine[i+1];
             let d = dist(p1.x, p1.y, p2.x, p2.y);
             let segment = Bodies.rectangle((p1.x+p2.x)/2, (p1.y+p2.y)/2, d, 8, { isStatic: true, angle: atan2(p2.y-p1.y, p2.x-p1.x) });
             Composite.add(world, segment);
@@ -238,10 +208,7 @@ function endGame() {
     gameState = 2;
     if (songReady && song.isPlaying()) song.stop();
     if (bgVideo) bgVideo.stop();   
-    if (endVideo) {
-        endVideo.time(0);
-        endVideo.play(); 
-    }
+    if (endVideo) { endVideo.time(0); endVideo.play(); }
 }
 
 function resetGame() {
