@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>王小丫凑凑</title>
+    <title>说谎的马卡龙 - 终极跳过排行榜版</title>
     <script src="https://cdn.jsdelivr.net/npm/hydrogen-js-sdk@2.2.3/dist/Bmob-2.2.3.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.sound.min.js"></script>
@@ -13,7 +13,7 @@
         #p5_loading { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #FAFAFA; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; }
         .loader { width: 40px; height: 40px; border: 3px solid #eee; border-top: 3px solid #FF0040; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        #name-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 30px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); text-align: center; z-index: 10001; width: 280px; }
+        #name-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 25px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); text-align: center; z-index: 10002; width: 260px; }
         #ninja-name-input { width: 90%; padding: 10px; margin: 15px 0; border: 2px solid #DDD; border-radius: 8px; font-size: 16px; text-align: center; }
         #confirm-name-btn { background: #FF0040; color: white; border: none; padding: 10px 30px; border-radius: 20px; font-weight: bold; cursor: pointer; }
     </style>
@@ -21,15 +21,13 @@
 <body>
     <div id="p5_loading"><div class="loader"></div></div>
     <div id="name-modal">
-        <h3>请输入你的忍者代号</h3>
-        <input type="text" id="ninja-name-input" placeholder="最多10个字" maxlength="10">
+        <h3 style="margin:0">输入忍者代号</h3>
+        <input type="text" id="ninja-name-input" placeholder="输入昵称..." maxlength="10">
         <button id="confirm-name-btn" onclick="savePlayerName()">确 定</button>
     </div>
 
 <script>
-// =======================================================
-// ！！！填入你的 Bmob 秘钥 ！！！
-// =======================================================
+// 初始化 Bmob
 Bmob.initialize("13354dd487ffdd1009443fc2123a4fd5", "cec5e2a28058b73ca0b6731f12c9a36b");
 
 const { Engine, World, Bodies, Composite } = Matter;
@@ -38,8 +36,8 @@ let fallingObjects = [];
 let bladeTrail = []; 
 let songReady = false, bgVideo, endVideo;
 let gameState = 0; 
-let score = 0; let combo = 0; let lives = 3; let shakeTime = 0; let freezeTime = 0;
-let playerName = null; let globalLeaderboard = []; let isUploading = false; 
+let score = 0, combo = 0, lives = 3, shakeTime = 0, freezeTime = 0;
+let playerName = null; let globalLeaderboard = []; let isUploading = false;
 
 function preload() {
     song = loadSound('makal.mp3', () => { songReady = true; });
@@ -53,96 +51,79 @@ function preload() {
 
 function setup() {
     createCanvas(windowWidth, windowHeight);
-    pixelDensity(1);
     let savedName = localStorage.getItem('ninja_name');
     if (savedName) { playerName = savedName; } else { document.getElementById('name-modal').style.display = 'block'; }
     fetchGlobalLeaderboard();
 
     engine = Engine.create(); world = engine.world;
-    engine.gravity.y = 0.8; 
+    engine.gravity.y = 0.9; // 增强重力手感
 
     bgVideo = createVideo(['bg.mp4']); bgVideo.hide(); bgVideo.elt.muted = true;
     endVideo = createVideo(['end.mp4']); endVideo.hide();
 
-    // ★ 抛射生成逻辑回归
+    // 核心抛射逻辑（昨天最爽的版本）
     setInterval(() => {
         if (gameState === 1) {
-            let spawnCount = random() > 0.7 ? 2 : 1;
+            let spawnCount = random() > 0.6 ? 2 : 1;
             for(let i=0; i<spawnCount; i++) {
-                let time = (songReady && song.isPlaying()) ? song.currentTime() : 0;
+                let time = song.isPlaying() ? song.currentTime() : 0;
                 let cur = lyricsTimeline.find(l => time >= l.start && time <= l.start + 2.5);
                 let char = cur ? random(cur.text.split("")) : "🎵";
                 
-                let rand = random(100);
                 let type = "normal";
-                if (rand < 5) type = "heart";
-                else if (rand < 15) type = "freeze";
-                else if (rand < 30) type = "trap";
+                let r = random(100);
+                if (r < 5) type = "heart";
+                else if (r < 15) type = "freeze";
+                else if (r < 30) type = "trap";
 
-                let body = Bodies.circle(random(100, width-100), height + 40, 30);
-                Matter.Body.setVelocity(body, { x: random(-4, 4), y: random(-18, -25) });
-                fallingObjects.push({ body: body, text: type==="trap"?"💣": (type==="freeze"?"❄️":(type==="heart"?"💖":char)), type: type, sliced: false, life: 255, size: 50 });
+                let body = Bodies.circle(random(80, width-80), height + 50, 35);
+                Matter.Body.setVelocity(body, { x: random(-5, 5), y: random(-19, -26) });
+                fallingObjects.push({ body: body, text: type==="trap"?"💣": (type==="freeze"?"❄️":(type==="heart"?"💖":char)), type: type, sliced: false, life: 255, size: 55 });
                 Composite.add(world, body);
             }
         }
-    }, 400);
+    }, 380);
 }
 
 function draw() {
     if (shakeTime > 0) { push(); translate(random(-15, 15), random(-15, 15)); shakeTime--; } else { push(); }
 
     if (gameState === 0) {
-        background('#FAFAFA'); textAlign(CENTER, CENTER); fill(50);
-        textSize(min(width*0.08, 55)); text("嘘つきは馬鹿に効く", width/2, height/2 - 40);
-        textSize(20); fill(150); text("- Swipe to Start -", width/2, height/2 + 80);
+        background(250); textAlign(CENTER); fill(50);
+        textSize(45); text("说谎的马卡龙", width/2, height/2 - 20);
+        textSize(18); fill(150); text("ARCADE NINJA MODE\n- Swipe to Start -", width/2, height/2 + 60);
         pop(); return;
     }
 
-    if (gameState === 1) {
-        background(15);
-        if (freezeTime > 0) { freezeTime--; engine.timing.timeScale = 0.3; tint(100, 200, 255, 200); }
-        else { engine.timing.timeScale = 1; noTint(); }
+    background(15);
+    if (freezeTime > 0) { freezeTime--; engine.timing.timeScale = 0.35; tint(100, 220, 255); }
+    else { engine.timing.timeScale = 1; noTint(); }
 
-        if (bgVideo && bgVideo.width > 0) image(bgVideo, 0, 0, width, height);
-        Engine.update(engine);
+    if (bgVideo && bgVideo.elt.readyState > 2) image(bgVideo, 0, 0, width, height);
+    Engine.update(engine);
 
-        for (let i = fallingObjects.length-1; i>=0; i--) {
-            let obj = fallingObjects[i]; let b = obj.body;
-            push(); translate(b.position.x, b.position.y); rotate(b.angle); textAlign(CENTER, CENTER);
-            fill(obj.type==="trap"?0:255, obj.sliced ? obj.life : 255); 
-            textSize(obj.sliced ? obj.size : 50); text(obj.text, 0, 0); pop();
-
-            if (obj.sliced) { 
-                obj.life -= 15; obj.size -= 1; 
-                if (obj.life <= 0) { fallingObjects.splice(i,1); World.remove(world, b); }
-            } else if (b.position.y > height + 80 && b.velocity.y > 0) {
+    for (let i = fallingObjects.length-1; i>=0; i--) {
+        let obj = fallingObjects[i]; let b = obj.body;
+        push(); translate(b.position.x, b.position.y); rotate(b.angle); textAlign(CENTER, CENTER);
+        
+        if (obj.sliced) {
+            fill(255, obj.life); textSize(obj.size); text(obj.text, 0, 0);
+            obj.life -= 12; obj.size -= 0.8;
+            if (obj.life <= 0) { fallingObjects.splice(i,1); World.remove(world, b); }
+        } else {
+            fill(obj.type==="trap"?"#000":"#FFF"); textSize(55); text(obj.text, 0, 0);
+            if (b.position.y > height + 100 && b.velocity.y > 0) {
                 if (obj.type === "normal") combo = 0;
                 fallingObjects.splice(i,1); World.remove(world, b);
             }
         }
-
-        // 刀光
-        if (mouseIsPressed) {
-            bladeTrail.push({ x: mouseX, y: mouseY, life: 20 });
-            checkCollision();
-        }
-        drawBlade();
-
-        // UI
-        fill(255); textSize(22); textStyle(BOLD); textAlign(LEFT, TOP);
-        text("SCORE: " + score, 20, 20);
-        textAlign(RIGHT); text("💖".repeat(lives), width - 20, 20);
+        pop();
     }
 
-    if (gameState === 2) drawEndScreen();
-    pop();
-}
-
-function checkCollision() {
-    for (let obj of fallingObjects) {
-        if (!obj.sliced) {
-            let d = dist(mouseX, mouseY, obj.body.position.x, obj.body.position.y);
-            if (d < 50 && dist(mouseX, mouseY, pmouseX, pmouseY) > 5) {
+    if (mouseIsPressed) {
+        bladeTrail.push({ x: mouseX, y: mouseY, life: 20 });
+        for (let obj of fallingObjects) {
+            if (!obj.sliced && dist(mouseX, mouseY, obj.body.position.x, obj.body.position.y) < 65) {
                 obj.sliced = true;
                 if (obj.type === "trap") { lives--; combo = 0; shakeTime = 30; if (lives <= 0) endGame(); }
                 else if (obj.type === "freeze") { freezeTime = 180; score += 20; }
@@ -151,42 +132,58 @@ function checkCollision() {
             }
         }
     }
+
+    // 绘制刀光
+    noFill(); stroke(255, 200);
+    for (let i = 1; i < bladeTrail.length; i++) {
+        strokeWeight(bladeTrail[i].life * 0.5);
+        line(bladeTrail[i-1].x, bladeTrail[i-1].y, bladeTrail[i].x, bladeTrail[i].y);
+        bladeTrail[i].life -= 2;
+    }
+    bladeTrail = bladeTrail.filter(p => p.life > 0);
+
+    // 右上角跳过按钮
+    drawSkipBtn();
+
+    // 游戏 UI
+    fill(255); textSize(24); textAlign(LEFT, TOP); text("SCORE: " + score, 20, 20);
+    textAlign(RIGHT); text("💖".repeat(lives), width-20, 20);
+
+    if (gameState === 2) drawRanking();
+    pop();
 }
 
-function drawBlade() {
-    noFill(); for (let i = 0; i < bladeTrail.length; i++) {
-        let pt = bladeTrail[i]; strokeWeight(pt.life * 0.7); stroke(255, 255, 255, pt.life * 12);
-        if(i>0) line(bladeTrail[i-1].x, bladeTrail[i-1].y, pt.x, pt.y); pt.life -= 2;
-    }
-    bladeTrail = bladeTrail.filter(pt => pt.life > 0);
+function drawSkipBtn() {
+    let bx = width-50, by = 80;
+    fill(0, 100); noStroke(); ellipse(bx, by, 50, 50);
+    fill(255); textAlign(CENTER, CENTER); textSize(20); text("⏭", bx, by);
+    if (mouseIsPressed && dist(mouseX, mouseY, bx, by) < 30) endGame();
 }
 
 function endGame() {
-    gameState = 2; if (songReady) song.stop();
+    gameState = 2; song.stop(); bgVideo.stop();
     if (score > 0 && !isUploading) {
         isUploading = true;
-        const query = Bmob.Query('Leaderboard');
-        query.set("name", playerName); query.set("score", score);
-        query.save().then(() => { isUploading = false; fetchGlobalLeaderboard(); }).catch(() => { isUploading = false; });
+        Bmob.Query('Leaderboard').set("name", playerName).set("score", score).save().then(() => {
+            isUploading = false; fetchGlobalLeaderboard();
+        }).catch(() => isUploading = false);
     }
+    if (endVideo) { endVideo.time(0); endVideo.play(); }
 }
 
 function fetchGlobalLeaderboard() {
-    const query = Bmob.Query("Leaderboard");
-    query.order("-score"); query.limit(5);                
-    query.find().then(res => { globalLeaderboard = res; }).catch(e => console.log("拉取失败", e));
+    Bmob.Query("Leaderboard").order("-score").limit(5).find().then(res => globalLeaderboard = res);
 }
 
-function drawEndScreen() {
-    fill(0, 200); rect(width/2, height/2, width, height);
-    fill(255); textAlign(CENTER); textSize(40); text("游戏结束", width/2, height*0.2);
-    textSize(30); fill('#FF0040'); text("FINAL SCORE: " + score, width/2, height*0.3);
-    
-    textSize(20); fill(0, 229, 255); text("--- GLOBAL RANKING ---", width/2, height*0.45);
+function drawRanking() {
+    fill(0, 220); rect(width/2, height/2, width, height);
+    fill(255); textAlign(CENTER); textSize(35); text("忍者榜单", width/2, height*0.25);
     for (let i = 0; i < globalLeaderboard.length; i++) {
-        fill(255); text(`${i+1}. ${globalLeaderboard[i].name} : ${globalLeaderboard[i].score}`, width/2, height*0.52 + i*30);
+        let entry = globalLeaderboard[i];
+        fill(i===0?'#FFD700':'#FFF');
+        text(`${i+1}. ${entry.name} : ${entry.score}`, width/2, height*0.38 + i*35);
     }
-    fill(150); text("- Tap to Retry -", width/2, height*0.85);
+    fill(150); textSize(16); text("- Tap to Retry -", width/2, height*0.8);
 }
 
 function savePlayerName() {
@@ -196,12 +193,14 @@ function savePlayerName() {
 }
 
 function mousePressed() {
-    if (gameState === 0 && playerName) { gameState = 1; score = 0; lives = 3; combo = 0; song.play(); }
-    else if (gameState === 2 && !isUploading) { location.reload(); }
+    if (gameState === 0 && playerName) { gameState = 1; score = 0; lives = 3; song.play(); bgVideo.loop(); }
+    else if (gameState === 2 && !isUploading) { resetGame(); }
 }
 function touchStarted() { mousePressed(); return false; }
+function resetGame() { location.reload(); }
 function windowResized() { resizeCanvas(windowWidth, windowHeight); }
 </script>
 </body>
 </html>
+
 
