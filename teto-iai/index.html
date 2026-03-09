@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>TETO IAIJUTSU</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; background: #FFF; font-family: sans-serif; user-select: none; }
+        .back-btn { position: fixed; top: 25px; left: 25px; z-index: 999; color: #BBB; text-decoration: none; font-size: 12px; letter-spacing: 1px; }
+        
+        /* 极简结算层 */
+        #result-layer { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(255,255,255,0.95); display: none; z-index: 900; 
+            flex-direction: column; justify-content: center; align-items: center; 
+        }
+        #rank { font-size: 60px; font-weight: 900; color: #333; margin: 0; }
+        #time { font-size: 14px; color: #999; margin-top: 10px; letter-spacing: 2px; }
+    </style>
+</head>
+<body>
+    <a href="../index.html" class="back-btn">← BACK</a>
+    
+    <div id="result-layer" onclick="resetGame()">
+        <div id="rank">RANK</div>
+        <div id="time">000ms</div>
+    </div>
+
+<script>
+let state = 0; // 0:START, 1:WAIT, 2:READY, 3:END
+let startTime, reaction;
+let tetoReady = false;
+
+function setup() {
+    createCanvas(windowWidth, windowHeight);
+    rectMode(CENTER);
+}
+
+function draw() {
+    background(255);
+    
+    // 绘制极简地板
+    stroke(245); strokeWeight(2); 
+    line(0, height * 0.7, width, height * 0.7);
+
+    // 绘制 Teto
+    push();
+    translate(width * 0.35, height * 0.65);
+    drawTeto(tetoReady);
+    pop();
+
+    if (state === 0) {
+        noStroke(); fill(230); textAlign(CENTER); textSize(12);
+        text("TOUCH TO START", width/2, height/2);
+    } else if (state === 2) {
+        // 感叹号提示
+        fill('#D02941'); noStroke(); textAlign(CENTER); 
+        textSize(100); fontStyle(BOLD); text("!", width/2, height*0.35);
+    }
+}
+
+function drawTeto(ready) {
+    noStroke();
+    // Teto 红色钻头卷
+    fill('#D02941'); 
+    let dw = 26; let dh = 36; // 钻头尺寸
+    rect(ready ? -32 : -25, ready ? -15 : -28, dw, dh); // 左发
+    rect(ready ? 32 : 25, ready ? -15 : -28, dw, dh);  // 右发
+    
+    // 身体 (深灰制服)
+    fill('#444'); rect(0, ready ? 6 : 0, 32, ready ? 50 : 62);
+    // 皮肤
+    fill('#FFF0E5'); rect(0, -38, 44, 40);
+    // 领带
+    fill('#D02941'); rect(0, -18, 10, 6);
+}
+
+function mousePressed() {
+    if (state === 0) {
+        state = 1; tetoReady = false;
+        let wait = random(1500, 4500);
+        setTimeout(() => {
+            if (state === 1) { state = 2; startTime = millis(); tetoReady = true; }
+        }, wait);
+    } else if (state === 1) { // 抢跑
+        showResult("OUT", "TOO EARLY");
+    } else if (state === 2) { // 击中
+        reaction = millis() - startTime;
+        let rank = "C";
+        if (reaction < 160) rank = "S";
+        else if (reaction < 250) rank = "A";
+        else if (reaction < 400) rank = "B";
+        showResult(rank, reaction.toFixed(0) + "ms");
+    }
+}
+
+function showResult(r, t) {
+    state = 3;
+    document.getElementById('rank').innerText = r;
+    document.getElementById('time').innerText = t;
+    document.getElementById('result-layer').style.display = 'flex';
+}
+
+function resetGame() {
+    document.getElementById('result-layer').style.display = 'none';
+    state = 0; tetoReady = false;
+}
+
+function touchStarted() { mousePressed(); return false; }
+function windowResized() { resizeCanvas(windowWidth, windowHeight); }
+</script>
+</body>
+</html>

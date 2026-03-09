@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>MIKU IAIJUTSU - 辛巴巴</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.sound.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; background: #FFF; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; user-select: none; }
+        /* 返回主菜单按钮 */
+        .back-link { position: fixed; top: 25px; left: 25px; z-index: 100; color: #DDD; text-decoration: none; font-size: 12px; letter-spacing: 2px; transition: 0.3s; }
+        .back-link:hover { color: #FF0040; }
+        
+        /* 结算弹窗 */
+        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); display: none; z-index: 90; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; }
+        #result-rank { font-size: 80px; font-weight: 900; color: #333; margin-bottom: 10px; font-style: italic; }
+        #result-msg { font-size: 18px; color: #FF0040; font-weight: bold; text-align: center; max-width: 80%; line-height: 1.6; }
+        #result-time { font-size: 14px; color: #BBB; margin-top: 20px; letter-spacing: 2px; }
+    </style>
+</head>
+<body>
+    <a href="../index.html" class="back-link">← BACK TO HUB</a>
+
+    <div id="overlay" onclick="resetGame()">
+        <div id="result-rank">RANK</div>
+        <div id="result-msg">文案加载中...</div>
+        <div id="result-time">000ms</div>
+        <div style="margin-top: 40px; color: #EEE; font-size: 10px;">点击屏幕重试</div>
+    </div>
+
+<script>
+/**
+ * 核心逻辑：仿 aidn 极简居合斩
+ */
+let state = "START"; // START, WAIT, GO, END
+let startTime, reactionTime;
+let bgm, slashSound, missSound;
+let mikuAction = "idle";
+let shake = 0;
+
+function preload() {
+    soundFormats('mp3');
+    bgm = loadSound('audio/bgm');
+    slashSound = loadSound('audio/slash');
+    missSound = loadSound('audio/miss');
+}
+
+function setup() {
+    createCanvas(windowWidth, windowHeight);
+    rectMode(CENTER);
+}
+
+function draw() {
+    background(255);
+    if (shake > 0) { translate(random(-shake, shake), random(-shake, shake)); shake *= 0.8; }
+
+    // 地板感
+    stroke(245); strokeWeight(4); line(0, height * 0.7, width, height * 0.7);
+
+    // 渲染 Miku
+    push();
+    translate(width * 0.35, height * 0.65);
+    drawMiku(mikuAction);
+    pop();
+
+    // 渲染目标 (木桩/积木)
+    push();
+    translate(width * 0.7, height * 0.65);
+    drawTarget(state === "END" && reactionTime < 500);
+    pop();
+
+    if (state === "START") {
+        noStroke(); fill(0, 10); rect(width/2, height/2, width, height);
+        fill(200); textAlign(CENTER); textSize(14); text("READY?", width/2, height/2);
+    } else if (state === "GO") {
+        fill('#FF0040'); textAlign(CENTER); textSize(120); textStyle(BOLD);
+        text("!", width/2, height*0.35);
+    }
+}
+
+function drawMiku(action) {
+    noStroke();
+    let isReady = (action === "ready");
+    // 经典 Miku 蓝
+    fill('#24CCFF'); 
+    rect(isReady ? -35 : -25, isReady ? -20 : -35, 12, 65); // 左马尾
+    rect(isReady ? 35 : 25, isReady ? -20 : -35, 12, 65);  // 右马尾
+    rect(0, isReady ? 5 : 0, 32, isReady ? 50 : 60);      // 身体
+    fill('#FFF0E5'); rect(0, -35, 42, 38);               // 脸
+}
+
+function drawTarget(isCut) {
+    noStroke(); fill('#F0F0F0');
+    if (isCut) {
+        rect(10, -20, 40, 80); // 切开后的位移
+    } else {
+        rect(0, 0, 40, 100);
+    }
+}
+
+function mousePressed() {
+    if (state === "START") {
+        state = "WAIT"; mikuAction = "idle"; bgm.loop();
+        setTimeout(() => {
+            if (state === "WAIT") { state = "GO"; startTime = millis(); mikuAction = "ready"; }
+        }, random(2000, 5000));
+    } else if (state === "WAIT") {
+        handleEnd(999); // 抢跑
+    } else if (state === "GO") {
+        handleEnd(millis() - startTime); // 击中
+    }
+}
+
+function handleEnd(t) {
+    state = "END"; bgm.stop();
+    let rank = "", msg = "";
+
+    if (t === 999) {
+        missSound.play(); rank = "OUT"; 
+        msg = "你也想起舞吗？\n抢跑直接退环境！";
+    } else {
+        slashSound.play(); shake = t < 200 ? 25 : 5;
+        if (t < 150) { rank = "S"; msg = "这就是贝壳之人的反应吗？\n长门，这就是你说的神吗？"; }
+        else if (t < 250) { rank = "A"; msg = "纯爱战神应声倒地！\n这一刀，我愿称你为最强。"; }
+        else if (t < 400) { rank = "B"; msg = "你是故意的还是不小心的？\n建议穿上切尔西再来。"; }
+        else { rank = "C"; msg = "满屏都是大肠的味道...\n你要退环境了。"; }
+    }
+
+    showOverlay(rank, msg, t === 999 ? "TOO FAST" : t.toFixed(0) + "ms");
+}
+
+function showOverlay(r, m, t) {
+    document.getElementById('result-rank').innerText = r;
+    document.getElementById('result-msg').innerText = m;
+    document.getElementById('result-time').innerText = t;
+    document.getElementById('overlay').style.display = 'flex';
+}
+
+function resetGame() {
+    document.getElementById('overlay').style.display = 'none';
+    state = "START"; mikuAction = "idle";
+}
+
+function touchStarted() { mousePressed(); return false; }
+</script>
+</body>
+</html>
