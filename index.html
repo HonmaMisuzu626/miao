@@ -3,32 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>王小羊凑凑版</title>
+    <title>王小丫凑凑</title>
     <script src="https://cdn.jsdelivr.net/npm/hydrogen-js-sdk@2.2.3/dist/Bmob-2.2.3.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/addons/p5.sound.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.18.0/matter.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #FAFAFA; cursor: crosshair; touch-action: none; font-family: sans-serif;}
+        body { margin: 0; overflow: hidden; background: #FAFAFA; cursor: crosshair; touch-action: none; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;}
         #p5_loading { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #FAFAFA; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; }
-        .loader { width: 40px; height: 40px; border: 3px solid #eee; border-top: 3px solid #FF0040; border-radius: 50%; animation: spin 1s linear infinite; }
+        .loader { width: 40px; height: 40px; border: 3px solid #eee; border-top: 3px solid #FF0040; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        #name-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 50px rgba(0,0,0,0.2); text-align: center; z-index: 10000; width: 280px; }
-        #ninja-name-input { width: 100%; padding: 12px; margin: 15px 0; border: 2px solid #EEE; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
-        #confirm-name-btn { background: #FF0040; color: white; border: none; padding: 10px 40px; border-radius: 20px; font-weight: bold; cursor: pointer; }
+        #name-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 30px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); text-align: center; z-index: 10001; width: 280px; }
+        #ninja-name-input { width: 90%; padding: 10px; margin: 15px 0; border: 2px solid #DDD; border-radius: 8px; font-size: 16px; text-align: center; }
+        #confirm-name-btn { background: #FF0040; color: white; border: none; padding: 10px 30px; border-radius: 20px; font-weight: bold; cursor: pointer; }
     </style>
 </head>
 <body>
     <div id="p5_loading"><div class="loader"></div></div>
     <div id="name-modal">
-        <h3 style="margin:0">设置代号</h3>
-        <input type="text" id="ninja-name-input" placeholder="请输入昵称..." maxlength="10">
+        <h3>请输入你的忍者代号</h3>
+        <input type="text" id="ninja-name-input" placeholder="最多10个字" maxlength="10">
         <button id="confirm-name-btn" onclick="savePlayerName()">确 定</button>
     </div>
 
 <script>
 // =======================================================
-// ！！！在这里填入你的 Bmob 秘钥 ！！！
+// ！！！填入你的 Bmob 秘钥 ！！！
 // =======================================================
 Bmob.initialize("13354dd487ffdd1009443fc2123a4fd5", "cec5e2a28058b73ca0b6731f12c9a36b");
 
@@ -38,10 +38,8 @@ let fallingObjects = [];
 let bladeTrail = []; 
 let songReady = false, bgVideo, endVideo;
 let gameState = 0; 
-let score = 0, combo = 0, lives = 3, freezeTime = 0, shakeTime = 0;
-let playerName = null; 
-let globalLeaderboard = []; 
-let isUploading = false; 
+let score = 0; let combo = 0; let lives = 3; let shakeTime = 0; let freezeTime = 0;
+let playerName = null; let globalLeaderboard = []; let isUploading = false; 
 
 function preload() {
     song = loadSound('makal.mp3', () => { songReady = true; });
@@ -55,10 +53,9 @@ function preload() {
 
 function setup() {
     createCanvas(windowWidth, windowHeight);
+    pixelDensity(1);
     let savedName = localStorage.getItem('ninja_name');
     if (savedName) { playerName = savedName; } else { document.getElementById('name-modal').style.display = 'block'; }
-    
-    // 初始化时拉取一次榜单
     fetchGlobalLeaderboard();
 
     engine = Engine.create(); world = engine.world;
@@ -67,130 +64,139 @@ function setup() {
     bgVideo = createVideo(['bg.mp4']); bgVideo.hide(); bgVideo.elt.muted = true;
     endVideo = createVideo(['end.mp4']); endVideo.hide();
 
-    // 自动生成物体
+    // ★ 抛射生成逻辑回归
     setInterval(() => {
-        if (gameState === 1) spawnObject();
-    }, 450);
-}
+        if (gameState === 1) {
+            let spawnCount = random() > 0.7 ? 2 : 1;
+            for(let i=0; i<spawnCount; i++) {
+                let time = (songReady && song.isPlaying()) ? song.currentTime() : 0;
+                let cur = lyricsTimeline.find(l => time >= l.start && time <= l.start + 2.5);
+                let char = cur ? random(cur.text.split("")) : "🎵";
+                
+                let rand = random(100);
+                let type = "normal";
+                if (rand < 5) type = "heart";
+                else if (rand < 15) type = "freeze";
+                else if (rand < 30) type = "trap";
 
-function spawnObject() {
-    let time = (songReady && song.isPlaying()) ? song.currentTime() : 0;
-    let cur = lyricsTimeline.find(l => time >= l.start && time <= l.start + 2.5);
-    let char = cur ? random(cur.text.split("")) : "🎵";
-    let type = random() < 0.1 ? "trap" : (random() < 0.05 ? "heart" : "normal");
-    
-    let body = Bodies.circle(random(50, width-50), height + 40, 25);
-    Matter.Body.setVelocity(body, { x: random(-3, 3), y: random(-18, -24) });
-    
-    fallingObjects.push({ body: body, text: type==="trap"?"💣":char, type: type, sliced: false, life: 255 });
-    Composite.add(world, body);
+                let body = Bodies.circle(random(100, width-100), height + 40, 30);
+                Matter.Body.setVelocity(body, { x: random(-4, 4), y: random(-18, -25) });
+                fallingObjects.push({ body: body, text: type==="trap"?"💣": (type==="freeze"?"❄️":(type==="heart"?"💖":char)), type: type, sliced: false, life: 255, size: 50 });
+                Composite.add(world, body);
+            }
+        }
+    }, 400);
 }
 
 function draw() {
-    if (shakeTime > 0) { translate(random(-10, 10), random(-10, 10)); shakeTime--; }
-    
+    if (shakeTime > 0) { push(); translate(random(-15, 15), random(-15, 15)); shakeTime--; } else { push(); }
+
     if (gameState === 0) {
-        background('#FAFAFA');
-        textAlign(CENTER); fill(50); textSize(40); text("说谎的马卡龙", width/2, height/2);
-        fill(150); textSize(16); text("- 点击屏幕开始 -", width/2, height/2 + 60);
-        return;
+        background('#FAFAFA'); textAlign(CENTER, CENTER); fill(50);
+        textSize(min(width*0.08, 55)); text("嘘つきは馬鹿に効く", width/2, height/2 - 40);
+        textSize(20); fill(150); text("- Swipe to Start -", width/2, height/2 + 80);
+        pop(); return;
     }
 
-    background(15);
-    if (freezeTime > 0) { freezeTime--; engine.timing.timeScale = 0.3; tint(100, 200, 255); }
-    else { engine.timing.timeScale = 1; noTint(); }
+    if (gameState === 1) {
+        background(15);
+        if (freezeTime > 0) { freezeTime--; engine.timing.timeScale = 0.3; tint(100, 200, 255, 200); }
+        else { engine.timing.timeScale = 1; noTint(); }
 
-    if (bgVideo && bgVideo.width > 0) image(bgVideo, 0, 0, width, height);
-    Engine.update(engine);
+        if (bgVideo && bgVideo.width > 0) image(bgVideo, 0, 0, width, height);
+        Engine.update(engine);
 
-    // 绘制与切割判定
-    drawAndCheckSlice();
+        for (let i = fallingObjects.length-1; i>=0; i--) {
+            let obj = fallingObjects[i]; let b = obj.body;
+            push(); translate(b.position.x, b.position.y); rotate(b.angle); textAlign(CENTER, CENTER);
+            fill(obj.type==="trap"?0:255, obj.sliced ? obj.life : 255); 
+            textSize(obj.sliced ? obj.size : 50); text(obj.text, 0, 0); pop();
 
-    // UI
-    fill(255); textSize(24); textAlign(LEFT); text("SCORE: " + score, 20, 40);
-    textAlign(RIGHT); text("LIVES: " + "💖".repeat(lives), width-20, 40);
-
-    if (gameState === 2) drawLeaderboard();
-}
-
-function drawAndCheckSlice() {
-    for (let i = fallingObjects.length-1; i>=0; i--) {
-        let obj = fallingObjects[i];
-        let b = obj.body;
-        
-        push(); translate(b.position.x, b.position.y); rotate(b.angle);
-        fill(obj.type==="trap"?0:255); textSize(40); text(obj.text, 0, 0); pop();
-
-        if (!obj.sliced && mouseIsPressed) {
-            if (dist(mouseX, mouseY, b.position.x, b.position.y) < 40) {
-                obj.sliced = true;
-                if (obj.type === "trap") { lives--; shakeTime=20; if(lives<=0) endGame(); }
-                else { score += 10; combo++; }
+            if (obj.sliced) { 
+                obj.life -= 15; obj.size -= 1; 
+                if (obj.life <= 0) { fallingObjects.splice(i,1); World.remove(world, b); }
+            } else if (b.position.y > height + 80 && b.velocity.y > 0) {
+                if (obj.type === "normal") combo = 0;
+                fallingObjects.splice(i,1); World.remove(world, b);
             }
         }
-        if (b.position.y > height + 100) { fallingObjects.splice(i, 1); World.remove(world, b); }
+
+        // 刀光
+        if (mouseIsPressed) {
+            bladeTrail.push({ x: mouseX, y: mouseY, life: 20 });
+            checkCollision();
+        }
+        drawBlade();
+
+        // UI
+        fill(255); textSize(22); textStyle(BOLD); textAlign(LEFT, TOP);
+        text("SCORE: " + score, 20, 20);
+        textAlign(RIGHT); text("💖".repeat(lives), width - 20, 20);
     }
+
+    if (gameState === 2) drawEndScreen();
+    pop();
+}
+
+function checkCollision() {
+    for (let obj of fallingObjects) {
+        if (!obj.sliced) {
+            let d = dist(mouseX, mouseY, obj.body.position.x, obj.body.position.y);
+            if (d < 50 && dist(mouseX, mouseY, pmouseX, pmouseY) > 5) {
+                obj.sliced = true;
+                if (obj.type === "trap") { lives--; combo = 0; shakeTime = 30; if (lives <= 0) endGame(); }
+                else if (obj.type === "freeze") { freezeTime = 180; score += 20; }
+                else if (obj.type === "heart") { lives = min(lives+1, 5); score += 50; }
+                else { combo++; score += 10 + (combo * 2); }
+            }
+        }
+    }
+}
+
+function drawBlade() {
+    noFill(); for (let i = 0; i < bladeTrail.length; i++) {
+        let pt = bladeTrail[i]; strokeWeight(pt.life * 0.7); stroke(255, 255, 255, pt.life * 12);
+        if(i>0) line(bladeTrail[i-1].x, bladeTrail[i-1].y, pt.x, pt.y); pt.life -= 2;
+    }
+    bladeTrail = bladeTrail.filter(pt => pt.life > 0);
 }
 
 function endGame() {
-    gameState = 2;
-    if (songReady) song.stop();
+    gameState = 2; if (songReady) song.stop();
     if (score > 0 && !isUploading) {
         isUploading = true;
-        console.log("准备上传分数...");
         const query = Bmob.Query('Leaderboard');
-        query.set("name", playerName || "匿名忍者");
-        query.set("score", score);
-        // 强制开启全员可读权限
-        query.save().then(res => {
-            console.log("上传成功！");
-            isUploading = false;
-            fetchGlobalLeaderboard();
-        }).catch(err => {
-            console.error("上传失败:", err);
-            isUploading = false;
-        });
+        query.set("name", playerName); query.set("score", score);
+        query.save().then(() => { isUploading = false; fetchGlobalLeaderboard(); }).catch(() => { isUploading = false; });
     }
 }
 
 function fetchGlobalLeaderboard() {
-    console.log("正在获取全球榜单...");
     const query = Bmob.Query("Leaderboard");
-    query.order("-score");
-    query.limit(5);
-    query.find().then(res => {
-        globalLeaderboard = res;
-        console.log("榜单获取成功，条数：", res.length);
-    }).catch(err => {
-        console.error("榜单获取失败（可能是权限ACL问题）:", err);
-        globalLeaderboard = [{name: "数据拉取失败", score: 0}];
-    });
+    query.order("-score"); query.limit(5);                
+    query.find().then(res => { globalLeaderboard = res; }).catch(e => console.log("拉取失败", e));
 }
 
-function drawLeaderboard() {
-    fill(0, 180); rect(width/2, height/2, width, height);
-    fill(255); textAlign(CENTER); textSize(40); text("GAME OVER", width/2, height*0.25);
-    textSize(22); text("--- 全球前五 ---", width/2, height*0.35);
+function drawEndScreen() {
+    fill(0, 200); rect(width/2, height/2, width, height);
+    fill(255); textAlign(CENTER); textSize(40); text("游戏结束", width/2, height*0.2);
+    textSize(30); fill('#FF0040'); text("FINAL SCORE: " + score, width/2, height*0.3);
     
-    if (globalLeaderboard.length === 0) {
-        text("正在连接服务器...", width/2, height*0.45);
-    } else {
-        for (let i = 0; i < globalLeaderboard.length; i++) {
-            let item = globalLeaderboard[i];
-            text(`${i+1}. ${item.name} : ${item.score}`, width/2, height*0.45 + i*30);
-        }
+    textSize(20); fill(0, 229, 255); text("--- GLOBAL RANKING ---", width/2, height*0.45);
+    for (let i = 0; i < globalLeaderboard.length; i++) {
+        fill(255); text(`${i+1}. ${globalLeaderboard[i].name} : ${globalLeaderboard[i].score}`, width/2, height*0.52 + i*30);
     }
-    text("点击屏幕重试", width/2, height*0.85);
+    fill(150); text("- Tap to Retry -", width/2, height*0.85);
 }
 
 function savePlayerName() {
-    playerName = document.getElementById('ninja-name-input').value || "无名";
+    playerName = document.getElementById('ninja-name-input').value || "忍者";
     localStorage.setItem('ninja_name', playerName);
     document.getElementById('name-modal').style.display = 'none';
 }
 
 function mousePressed() {
-    if (gameState === 0 && playerName) { gameState = 1; if(songReady) song.play(); if(bgVideo) bgVideo.loop(); }
+    if (gameState === 0 && playerName) { gameState = 1; score = 0; lives = 3; combo = 0; song.play(); }
     else if (gameState === 2 && !isUploading) { location.reload(); }
 }
 function touchStarted() { mousePressed(); return false; }
@@ -198,7 +204,4 @@ function windowResized() { resizeCanvas(windowWidth, windowHeight); }
 </script>
 </body>
 </html>
-
-
-
 
