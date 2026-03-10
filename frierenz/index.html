@@ -5,31 +5,73 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>王小羊大笨蛋</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #050505; touch-action: none; }
-        #ui { position: absolute; top: 20px; left: 20px; color: white; font-family: sans-serif; pointer-events: none; z-index: 10; text-shadow: 0 0 5px #00ffff; }
-        #scoreboard { position: absolute; top: 20px; right: 20px; color: #fff; font-size: 24px; font-family: monospace; z-index: 10; }
+        body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Microsoft YaHei', sans-serif; touch-action: none; }
+        canvas { display: block; }
+        
+        /* UI 样式 */
+        .overlay { position: absolute; color: white; pointer-events: none; z-index: 10; }
+        #top-bar { top: 20px; left: 20px; right: 20px; display: flex; justify-content: space-between; align-items: flex-start; }
+        #timer { font-size: 32px; font-weight: bold; color: #ff4444; text-shadow: 0 0 10px #000; }
+        #score { font-size: 24px; color: #00ffff; text-shadow: 0 0 10px #000; }
+        
+        /* 菜单与返回按钮 */
+        .btn { 
+            padding: 10px 20px; background: rgba(0, 255, 255, 0.2); border: 1px solid #00ffff; 
+            color: white; pointer-events: auto; cursor: pointer; border-radius: 4px; transition: 0.3s;
+        }
+        .btn:hover { background: rgba(0, 255, 255, 0.5); }
+        #back-btn { position: absolute; bottom: 20px; left: 20px; }
+
+        /* 结算界面 */
+        #game-over { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.8); display: none; flex-direction: column; 
+            justify-content: center; align-items: center; pointer-events: auto; 
+        }
+        #game-over h2 { color: #00ffff; font-size: 48px; margin-bottom: 10px; }
+        #game-over p { font-size: 24px; margin-bottom: 30px; }
     </style>
 </head>
 <body>
-    <div id="ui"><h1>一般攻击魔法</h1><p>360°指向 | 点击释放动作</p></div>
-    <div id="scoreboard">SCORE: <span id="scoreVal">0</span></div>
+    <div id="top-bar" class="overlay">
+        <div>
+            <div id="timer">TIME: 60</div>
+            <div id="score">SCORE: 0</div>
+        </div>
+        <button class="btn" onclick="goToMenu()">返回菜单</button>
+    </div>
+
+    <div id="game-over">
+        <h2>时间到！</h2>
+        <p>你的得分: <span id="final-score">0</span></p>
+        <button class="btn" onclick="location.reload()">再玩一次</button>
+        <button class="btn" style="margin-top: 10px;" onclick="goToMenu()">返回合集</button>
+    </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/GLTFLoader.js"></script>
 
     <script>
-        let score = 0, mixer, actions = {};
+        // --- 游戏状态控制 ---
+        let score = 0, timeLeft = 60, isGameOver = false;
+        let mixer, actions = {};
         const clock = new THREE.Clock();
+        
+        function goToMenu() {
+            // 这里修改为你网站合集页面的 URL
+            window.location.href = "../index.html"; 
+        }
+
+        // --- 场景初始化 ---
         const scene = new THREE.Scene();
         scene.fog = new THREE.Fog(0x050505, 10, 60);
-
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(0, 10, 25);
         camera.lookAt(0, 4, 0);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         document.body.appendChild(renderer.domElement);
 
         scene.add(new THREE.AmbientLight(0xffffff, 1.2));
@@ -43,78 +85,76 @@
         const snowPos = new Float32Array(snowCount * 3);
         for(let i=0; i<snowCount*3; i++) snowPos[i] = (Math.random()-0.5)*60;
         snowGeo.setAttribute('position', new THREE.BufferAttribute(snowPos, 3));
-        const snowSystem = new THREE.Points(snowGeo, new THREE.PointsMaterial({color:0xffffff, size:0.12, transparent:true, opacity:0.8}));
+        const snowSystem = new THREE.Points(snowGeo, new THREE.PointsMaterial({color:0xffffff, size:0.1, transparent:true, opacity:0.8}));
         scene.add(snowSystem);
 
         const playerGroup = new THREE.Group();
         scene.add(playerGroup);
 
+        // --- 模型加载 ---
         const loader = new THREE.GLTFLoader();
-        // 🌟 只加载这一个合并了所有动作的文件
         loader.load('models/character.glb', (gltf) => {
             const model = gltf.scene;
-            
-            // 自动缩放与居中修正
             const box = new THREE.Box3().setFromObject(model);
             const size = box.getSize(new THREE.Vector3());
             const center = box.getCenter(new THREE.Vector3());
             model.position.x -= center.x;
             model.position.y -= center.y;
             model.position.z -= center.z;
-            const s = 10 / (size.y || 1); 
-            model.scale.set(s, s, s);
-            
+            model.scale.setScalar(10 / (size.y || 1));
             playerGroup.add(model);
-            mixer = new THREE.AnimationMixer(model);
 
-            // 识别所有动作
+            mixer = new THREE.AnimationMixer(model);
             gltf.animations.forEach(clip => {
                 actions[clip.name] = mixer.clipAction(clip);
-                console.log("识别到动作:", clip.name);
             });
-
-            // 默认播放 idle 或者第一个动作
             if (actions['idle']) actions['idle'].play();
-            else if (gltf.animations[0]) actions[gltf.animations[0].name].play();
+        });
 
-        }, undefined, (err) => console.error("模型加载失败，请检查 models/character.glb", err));
+        // --- 手机滑动转向适配 ---
+        let lastTouchX = 0;
+        window.addEventListener('touchstart', (e) => {
+            lastTouchX = e.touches[0].clientX;
+        });
 
-        // 360度指向
-        function aim(x, y) {
-            const centerX = window.innerWidth / 2;
-            const centerY = window.innerHeight / 2;
-            const angle = Math.atan2(x - centerX, y - centerY);
-            playerGroup.rotation.y = angle + Math.PI; 
-        }
+        window.addEventListener('touchmove', (e) => {
+            if(isGameOver) return;
+            // 计算滑动偏移量，增加灵敏度系数 0.005
+            const touchX = e.touches[0].clientX;
+            const deltaX = touchX - lastPosX; 
+            // 这种方式适合平滑旋转，如果需要指哪打哪，请使用之前发的中心映射逻辑
+            playerGroup.rotation.y -= (touchX - lastTouchX) * 0.01;
+            lastTouchX = touchX;
+        }, { passive: false });
 
-        window.addEventListener('pointermove', (e) => aim(e.clientX, e.clientY));
+        // 为了 PC 端保留鼠标跟随转向灵敏度
+        window.addEventListener('pointermove', (e) => {
+            if(isGameOver || e.pointerType === 'touch') return;
+            const angle = Math.atan2(e.clientX - window.innerWidth/2, e.clientY - window.innerHeight/2);
+            playerGroup.rotation.y = angle + Math.PI;
+        });
 
-        // 点击触发
+        // 点击/触摸释放魔法
         window.addEventListener('pointerdown', (e) => {
-            aim(e.clientX, e.clientY);
-            // 🌟 这里的名字要和你在 Blender NLA 里起的名字对应
-            const attackAct = actions['attack'] || actions['Armature动作']; 
-            const idleAct = actions['idle'];
-
+            if(isGameOver) return;
+            const attackAct = actions['attack'] || actions['Armature动作'];
             if (attackAct) {
-                if (idleAct) idleAct.fadeOut(0.1);
+                if (actions['idle']) actions['idle'].fadeOut(0.1);
                 attackAct.reset().fadeIn(0.1).setLoop(THREE.LoopOnce).play();
                 attackAct.clampWhenFinished = true;
-
-                const onFinish = (event) => {
-                    if (event.action === attackAct && idleAct) {
-                        idleAct.reset().fadeIn(0.4).play();
-                        mixer.removeEventListener('finished', onFinish);
+                mixer.addEventListener('finished', function restore(event) {
+                    if (event.action === attackAct && actions['idle']) {
+                        actions['idle'].reset().fadeIn(0.4).play();
+                        mixer.removeEventListener('finished', restore);
                     }
-                };
-                mixer.addEventListener('finished', onFinish);
+                });
             }
-
             dirLight.intensity = 5;
             setTimeout(() => dirLight.intensity = 1.5, 120);
             checkHit();
         });
 
+        // --- 碰撞与计时逻辑 ---
         const boxes = [];
         class Box {
             constructor() {
@@ -155,20 +195,35 @@
                     const boxRad = b.degree * (Math.PI / 180);
                     let diff = Math.abs(pRot - boxRad);
                     if (diff > Math.PI) diff = Math.PI * 2 - diff;
-                    if (diff < 0.6) { 
+                    if (diff < 0.6) {
                         b.explode();
                         score += 100;
-                        document.getElementById('scoreVal').innerText = score;
+                        document.getElementById('score').innerText = "SCORE: " + score;
                     }
                 }
             });
         }
 
+        // 倒计时器
+        const timerInterval = setInterval(() => {
+            if(isGameOver) return;
+            timeLeft--;
+            document.getElementById('timer').innerText = "TIME: " + timeLeft;
+            if(timeLeft <= 0) {
+                isGameOver = true;
+                clearInterval(timerInterval);
+                document.getElementById('game-over').style.display = 'flex';
+                document.getElementById('final-score').innerText = score;
+            }
+        }, 1000);
+
+        // --- 循环 ---
         function animate() {
             requestAnimationFrame(animate);
             const dt = clock.getDelta();
             if (mixer) mixer.update(dt);
             
+            // 雪花逻辑
             const sPos = snowGeo.attributes.position.array;
             for(let i=1; i<snowCount*3; i+=3) {
                 sPos[i] -= 3 * dt;
@@ -176,7 +231,7 @@
             }
             snowGeo.attributes.position.needsUpdate = true;
 
-            if (Math.random() < 0.03) boxes.push(new Box());
+            if (!isGameOver && Math.random() < 0.03) boxes.push(new Box());
             for(let i=boxes.length-1; i>=0; i--) {
                 boxes[i].update(dt);
                 if(!boxes[i].active) boxes.splice(i, 1);
