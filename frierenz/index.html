@@ -5,138 +5,150 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>王小羊大笨蛋</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Microsoft YaHei', sans-serif; touch-action: none; }
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: "Helvetica Neue", sans-serif; touch-action: none; }
         canvas { display: block; }
-        
-        /* UI 样式 */
-        .overlay { position: absolute; color: white; pointer-events: none; z-index: 10; }
-        #top-bar { top: 20px; left: 20px; right: 20px; display: flex; justify-content: space-between; align-items: flex-start; }
-        #timer { font-size: 32px; font-weight: bold; color: #ff4444; text-shadow: 0 0 10px #000; }
-        #score { font-size: 24px; color: #00ffff; text-shadow: 0 0 10px #000; }
-        
-        /* 菜单与返回按钮 */
-        .btn { 
-            padding: 10px 20px; background: rgba(0, 255, 255, 0.2); border: 1px solid #00ffff; 
-            color: white; pointer-events: auto; cursor: pointer; border-radius: 4px; transition: 0.3s;
-        }
-        .btn:hover { background: rgba(0, 255, 255, 0.5); }
-        #back-btn { position: absolute; bottom: 20px; left: 20px; }
 
-        /* 结算界面 */
-        #game-over { 
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(0,0,0,0.8); display: none; flex-direction: column; 
-            justify-content: center; align-items: center; pointer-events: auto; 
+        /* aidn 风格开始界面 */
+        #start-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 500; cursor: pointer;
         }
-        #game-over h2 { color: #00ffff; font-size: 48px; margin-bottom: 10px; }
-        #game-over p { font-size: 24px; margin-bottom: 30px; }
+        #start-screen h1 { color: #00ffff; font-weight: 100; letter-spacing: 10px; font-size: 40px; }
+        #start-screen p { color: #fff; opacity: 0.4; letter-spacing: 2px; font-size: 12px; margin-top: 20px; }
+
+        /* UI 元素 */
+        .ui-text { position: absolute; color: #00ffff; font-size: 12px; letter-spacing: 2px; pointer-events: none; z-index: 100; }
+        #timer { top: 30px; left: 30px; border-left: 1px solid #00ffff; padding-left: 10px; }
+        #score { top: 55px; left: 30px; border-left: 1px solid #00ffff; padding-left: 10px; opacity: 0.6; }
+        
+        #exit-btn {
+            position: absolute; top: 30px; right: 30px; background: none; border: 1px solid #00ffff;
+            color: #00ffff; padding: 5px 15px; font-size: 10px; cursor: pointer; z-index: 100; transition: 0.3s;
+        }
+        #exit-btn:hover { background: #00ffff; color: #000; }
+
+        /* 结束界面 */
+        #game-over {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95); display: none; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 600;
+        }
+        #game-over h2 { color: #00ffff; font-weight: 100; font-size: 50px; margin: 0; }
+        #game-over p { color: #fff; opacity: 0.5; margin: 20px 0 40px 0; }
+        .retry-btn { background: #00ffff; color: #000; border: none; padding: 12px 50px; cursor: pointer; font-size: 12px; letter-spacing: 2px; }
     </style>
 </head>
 <body>
-    <div id="top-bar" class="overlay">
-        <div>
-            <div id="timer">TIME: 60</div>
-            <div id="score">SCORE: 0</div>
-        </div>
-        <button class="btn" onclick="goToMenu()">返回菜单</button>
+    <div id="start-screen" onclick="startGame()">
+        <h1>一般攻击魔法</h1>
+        <p>TAP TO START</p>
     </div>
 
+    <div id="timer" class="ui-text">TIME / 60</div>
+    <div id="score" class="ui-text">SCORE / 0</div>
+    <button id="exit-btn" onclick="window.location.href='../index.html'">EXIT</button>
+
     <div id="game-over">
-        <h2>时间到！</h2>
-        <p>你的得分: <span id="final-score">0</span></p>
-        <button class="btn" onclick="location.reload()">再玩一次</button>
-        <button class="btn" style="margin-top: 10px;" onclick="goToMenu()">返回合集</button>
+        <h2>FINISH</h2>
+        <p>SCORE / <span id="final-score">0</span></p>
+        <button class="retry-btn" onclick="location.reload()">RETRY</button>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/js/loaders/GLTFLoader.js"></script>
 
     <script>
-        // --- 游戏状态控制 ---
-        let score = 0, timeLeft = 60, isGameOver = false;
+        let score = 0, timeLeft = 60, isGameOver = false, gameStarted = false;
         let mixer, actions = {};
         const clock = new THREE.Clock();
-        
-        function goToMenu() {
-            // 这里修改为你网站合集页面的 URL
-            window.location.href = "../index.html"; 
+
+        function startGame() {
+            document.getElementById('start-screen').style.display = 'none';
+            gameStarted = true;
+            startTimer();
         }
 
-        // --- 场景初始化 ---
+        // --- 场景基础 ---
         const scene = new THREE.Scene();
-        scene.fog = new THREE.Fog(0x050505, 10, 60);
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(0, 10, 25);
         camera.lookAt(0, 4, 0);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+        scene.add(new THREE.AmbientLight(0xffffff, 1.0));
         const dirLight = new THREE.DirectionalLight(0x00ffff, 1.5);
         dirLight.position.set(5, 15, 10);
         scene.add(dirLight);
 
-        // 雪花系统
-        const snowCount = 400;
+        // 雪花
+        const snowCount = 300;
         const snowGeo = new THREE.BufferGeometry();
         const snowPos = new Float32Array(snowCount * 3);
         for(let i=0; i<snowCount*3; i++) snowPos[i] = (Math.random()-0.5)*60;
         snowGeo.setAttribute('position', new THREE.BufferAttribute(snowPos, 3));
-        const snowSystem = new THREE.Points(snowGeo, new THREE.PointsMaterial({color:0xffffff, size:0.1, transparent:true, opacity:0.8}));
-        scene.add(snowSystem);
+        const snow = new THREE.Points(snowGeo, new THREE.PointsMaterial({color:0xffffff, size:0.08, transparent:true, opacity:0.4}));
+        scene.add(snow);
 
         const playerGroup = new THREE.Group();
         scene.add(playerGroup);
 
-        // --- 模型加载 ---
+        // 模型加载
         const loader = new THREE.GLTFLoader();
         loader.load('models/character.glb', (gltf) => {
             const model = gltf.scene;
             const box = new THREE.Box3().setFromObject(model);
             const size = box.getSize(new THREE.Vector3());
             const center = box.getCenter(new THREE.Vector3());
-            model.position.x -= center.x;
-            model.position.y -= center.y;
-            model.position.z -= center.z;
+            model.position.set(-center.x, -center.y, -center.z);
             model.scale.setScalar(10 / (size.y || 1));
             playerGroup.add(model);
 
             mixer = new THREE.AnimationMixer(model);
-            gltf.animations.forEach(clip => {
-                actions[clip.name] = mixer.clipAction(clip);
-            });
+            gltf.animations.forEach(clip => { actions[clip.name] = mixer.clipAction(clip); });
             if (actions['idle']) actions['idle'].play();
         });
 
-        // --- 手机滑动转向适配 ---
-        let lastTouchX = 0;
-        window.addEventListener('touchstart', (e) => {
-            lastTouchX = e.touches[0].clientX;
-        });
+        // --- 核心：极速平移转向逻辑 (适配 PC 和 手机) ---
+        let isPointerDown = false;
+        let lastX = 0;
+        const sensitivity = 0.008; // 🌟 这里调节灵敏度，数值越大转越快
 
-        window.addEventListener('touchmove', (e) => {
-            if(isGameOver) return;
-            // 计算滑动偏移量，增加灵敏度系数 0.005
-            const touchX = e.touches[0].clientX;
-            const deltaX = touchX - lastPosX; 
-            // 这种方式适合平滑旋转，如果需要指哪打哪，请使用之前发的中心映射逻辑
-            playerGroup.rotation.y -= (touchX - lastTouchX) * 0.01;
-            lastTouchX = touchX;
-        }, { passive: false });
+        function onPointerDown(x) {
+            if (!gameStarted || isGameOver) return;
+            isPointerDown = true;
+            lastX = x;
+        }
 
-        // 为了 PC 端保留鼠标跟随转向灵敏度
-        window.addEventListener('pointermove', (e) => {
-            if(isGameOver || e.pointerType === 'touch') return;
-            const angle = Math.atan2(e.clientX - window.innerWidth/2, e.clientY - window.innerHeight/2);
-            playerGroup.rotation.y = angle + Math.PI;
-        });
+        function onPointerMove(x) {
+            if (!isPointerDown) return;
+            const deltaX = x - lastX;
+            // 🌟 左右平移带动 360 度旋转
+            playerGroup.rotation.y += deltaX * sensitivity;
+            lastX = x;
+        }
 
-        // 点击/触摸释放魔法
-        window.addEventListener('pointerdown', (e) => {
-            if(isGameOver) return;
+        function onPointerUp() {
+            if (!isPointerDown) return;
+            isPointerDown = false;
+            triggerAttack();
+        }
+
+        // PC 鼠标事件
+        window.addEventListener('mousedown', (e) => onPointerDown(e.clientX));
+        window.addEventListener('mousemove', (e) => onPointerMove(e.clientX));
+        window.addEventListener('mouseup', onPointerUp);
+
+        // 手机触屏事件
+        window.addEventListener('touchstart', (e) => onPointerDown(e.touches[0].clientX));
+        window.addEventListener('touchmove', (e) => onPointerMove(e.touches[0].clientX));
+        window.addEventListener('touchend', onPointerUp);
+
+        function triggerAttack() {
             const attackAct = actions['attack'] || actions['Armature动作'];
             if (attackAct) {
                 if (actions['idle']) actions['idle'].fadeOut(0.1);
@@ -152,25 +164,30 @@
             dirLight.intensity = 5;
             setTimeout(() => dirLight.intensity = 1.5, 120);
             checkHit();
-        });
+        }
 
-        // --- 碰撞与计时逻辑 ---
+        // --- 实体方块与碰撞 ---
         const boxes = [];
         class Box {
             constructor() {
-                this.mesh = new THREE.Mesh(new THREE.BoxGeometry(2, 6, 2), new THREE.MeshLambertMaterial({color: 0x00ccff}));
+                // 🌟 实体方块：使用 MeshLambertMaterial
+                this.mesh = new THREE.Mesh(
+                    new THREE.BoxGeometry(2, 6, 2), 
+                    new THREE.MeshLambertMaterial({color: 0x00ffff})
+                );
                 this.degree = Math.floor(Math.random() * 8) * 45;
                 const r = this.degree * (Math.PI / 180);
                 this.mesh.position.set(Math.sin(r) * 12, 45, Math.cos(r) * 12);
                 scene.add(this.mesh);
                 this.active = true;
-                this.speed = 5 + Math.random() * 5;
+                this.speed = 6 + Math.random() * 4;
             }
             update(dt) {
                 this.mesh.position.y -= this.speed * dt;
                 if (this.mesh.position.y < -5) this.kill();
             }
             explode() {
+                // 🌟 击中碎裂效果
                 for(let i=0; i<6; i++) {
                     const shard = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.5,0.5), new THREE.MeshLambertMaterial({color:0x00ffff}));
                     shard.position.copy(this.mesh.position);
@@ -183,6 +200,8 @@
                     }, 16);
                 }
                 this.kill();
+                score += 100;
+                document.getElementById('score').innerText = "SCORE / " + score;
             }
             kill() { this.active = false; scene.remove(this.mesh); }
         }
@@ -191,47 +210,42 @@
             let pRot = playerGroup.rotation.y % (Math.PI * 2);
             if (pRot < 0) pRot += Math.PI * 2;
             boxes.forEach(b => {
-                if (b.active && b.mesh.position.y > 0 && b.mesh.position.y < 12) {
+                if (b.active && b.mesh.position.y > 0 && b.mesh.position.y < 15) {
                     const boxRad = b.degree * (Math.PI / 180);
                     let diff = Math.abs(pRot - boxRad);
                     if (diff > Math.PI) diff = Math.PI * 2 - diff;
-                    if (diff < 0.6) {
-                        b.explode();
-                        score += 100;
-                        document.getElementById('score').innerText = "SCORE: " + score;
-                    }
+                    if (diff < 0.7) b.explode();
                 }
             });
         }
 
-        // 倒计时器
-        const timerInterval = setInterval(() => {
-            if(isGameOver) return;
-            timeLeft--;
-            document.getElementById('timer').innerText = "TIME: " + timeLeft;
-            if(timeLeft <= 0) {
-                isGameOver = true;
-                clearInterval(timerInterval);
-                document.getElementById('game-over').style.display = 'flex';
-                document.getElementById('final-score').innerText = score;
-            }
-        }, 1000);
+        function startTimer() {
+            const timerInterval = setInterval(() => {
+                if(isGameOver) return;
+                timeLeft--;
+                document.getElementById('timer').innerText = "TIME / " + timeLeft;
+                if(timeLeft <= 0) {
+                    isGameOver = true;
+                    clearInterval(timerInterval);
+                    document.getElementById('game-over').style.display = 'flex';
+                    document.getElementById('final-score').innerText = score;
+                }
+            }, 1000);
+        }
 
-        // --- 循环 ---
         function animate() {
             requestAnimationFrame(animate);
             const dt = clock.getDelta();
             if (mixer) mixer.update(dt);
             
-            // 雪花逻辑
-            const sPos = snowGeo.attributes.position.array;
+            const sPos = snow.geometry.attributes.position.array;
             for(let i=1; i<snowCount*3; i+=3) {
-                sPos[i] -= 3 * dt;
+                sPos[i] -= 4 * dt;
                 if(sPos[i] < -5) sPos[i] = 30;
             }
-            snowGeo.attributes.position.needsUpdate = true;
+            snow.geometry.attributes.position.needsUpdate = true;
 
-            if (!isGameOver && Math.random() < 0.03) boxes.push(new Box());
+            if (gameStarted && !isGameOver && Math.random() < 0.04) boxes.push(new Box());
             for(let i=boxes.length-1; i>=0; i--) {
                 boxes[i].update(dt);
                 if(!boxes[i].active) boxes.splice(i, 1);
